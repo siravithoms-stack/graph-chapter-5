@@ -1,0 +1,1624 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>บทที่ 5 : การเลือกทำเลที่ตั้งด้วยวิธีตัวแบบขนส่ง (Transportation Model)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Sarabun', 'Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                            800: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Sarabun', 'Inter', sans-serif; }
+        .grid-bg-light {
+            background-size: 20px 20px;
+            background-image: linear-gradient(to right, rgba(226, 232, 240, 0.6) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(226, 232, 240, 0.6) 1px, transparent 1px);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-sky-500 text-white p-2 rounded-lg font-bold text-xl flex items-center justify-center w-10 h-10">
+                    <i class="fa-solid font-bold fa-truck-fast"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight">บทที่ 5: การเลือกทำเลที่ตั้ง (Location Selection)</h1>
+                    <p class="text-xs text-slate-400">ตัวแบบขนส่ง (Transportation Model) & สูตรคำนวณระยะทาง</p>
+                </div>
+            </div>
+            
+            <div class="hidden md:flex space-x-1">
+                <button onclick="switchTab('coord-tab')" id="nav-coord-tab" class="tab-btn active px-4 py-2 rounded-lg text-sm font-medium transition bg-sky-600 text-white">
+                    <i class="fa-solid fa-map-location-dot mr-1.5"></i> 1. คำนวณระยะทาง & กราฟพิกัด
+                </button>
+                <button onclick="switchTab('vam-tab')" id="nav-vam-tab" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition text-slate-300 hover:text-white hover:bg-slate-800">
+                    <i class="fa-solid fa-table-cells mr-1.5"></i> 2. ตัวแบบขนส่ง VAM
+                </button>
+                <button onclick="switchTab('breakeven-tab')" id="nav-breakeven-tab" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition text-slate-300 hover:text-white hover:bg-slate-800">
+                    <i class="fa-solid fa-chart-line mr-1.5"></i> 3. จุดคุ้มทุนทำเล
+                </button>
+                <button onclick="switchTab('npv-tab')" id="nav-npv-tab" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium transition text-slate-300 hover:text-white hover:bg-slate-800">
+                    <i class="fa-solid fa-calculator mr-1.5"></i> 4. มูลค่าปัจจุบัน (NPV)
+                </button>
+            </div>
+
+            <!-- Mobile menu selector -->
+            <div class="md:hidden">
+                <select onchange="switchTab(this.value)" class="bg-slate-800 text-white text-sm rounded-lg p-2 border border-slate-700">
+                    <option value="coord-tab">1. คำนวณระยะทาง & กราฟพิกัด</option>
+                    <option value="vam-tab">2. ตัวแบบขนส่ง VAM</option>
+                    <option value="breakeven-tab">3. จุดคุ้มทุนทำเล</option>
+                    <option value="npv-tab">4. มูลค่าปัจจุบัน (NPV)</option>
+                </select>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <section id="coord-tab" class="tab-content block space-y-6">
+            <!-- Header & Presets -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+                        <i class="fa-solid fa-compass text-sky-600"></i>
+                        กรณีที่ 1: โรงงานแห่งเดียว มีทำเลให้เลือกหลายจุด (วิธีพิกัดฉาก & คำนวณระยะทาง)
+                    </h2>
+                    <p class="text-sm text-slate-500 mt-1">
+                        คำนวณระยะทางเส้นตรง (Euclidean Distance): <span class="font-mono font-semibold text-sky-700">d = √[(x₂ - x₁)² + (y₂ - y₁)²]</span>
+                    </p>
+                </div>
+
+                <!-- Presets -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">ตัวอย่างโจทย์:</span>
+                    <button onclick="loadCoordPreset('ex4')" class="px-3 py-1.5 bg-slate-100 hover:bg-sky-100 hover:text-sky-700 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition">
+                        <i class="fa-solid fa-bookmark text-sky-500 mr-1"></i> ตัวอย่างที่ 4 (หน้า 15)
+                    </button>
+                    <button onclick="loadCoordPreset('hw1')" class="px-3 py-1.5 bg-slate-100 hover:bg-sky-100 hover:text-sky-700 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition">
+                        <i class="fa-solid fa-pen-to-square text-amber-500 mr-1"></i> การบ้านข้อ 1 (หน้า 22)
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Left Panel: Inputs -->
+                <div class="lg:col-span-5 space-y-5">
+                    
+                    <!-- Global Rate & Scale -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                        <h3 class="font-bold text-slate-800 border-b border-slate-100 pb-2 text-sm uppercase tracking-wide flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-sky-600"></i> ตั้งค่าอัตราค่าขนส่ง & มาตราส่วน
+                        </h3>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">ค่าขนส่ง (บาท/กม.)</label>
+                                <input type="number" id="coord-rate" value="10" oninput="calculateCoordModel()" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">1 หน่วยพิกัด = (กม.)</label>
+                                <input type="number" id="coord-scale" value="100" oninput="calculateCoordModel()" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Raw Material Sources -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+                        <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                            <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wide text-amber-600 flex items-center gap-2">
+                                <i class="fa-solid fa-cubes-stacked"></i> แหล่งวัตถุดิบ (Raw Materials)
+                            </h3>
+                            <button onclick="addRawMaterialNode()" class="text-xs text-sky-600 hover:text-sky-800 font-medium">
+                                <i class="fa-solid fa-plus"></i> เพิ่มวัตถุดิบ
+                            </button>
+                        </div>
+                        <div id="raw-materials-list" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                            <!-- JS loaded -->
+                        </div>
+                    </div>
+
+                    <!-- Market Locations -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+                        <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                            <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wide text-emerald-600 flex items-center gap-2">
+                                <i class="fa-solid fa-store"></i> ตลาดสินค้า (Markets)
+                            </h3>
+                            <button onclick="addMarketNode()" class="text-xs text-sky-600 hover:text-sky-800 font-medium">
+                                <i class="fa-solid fa-plus"></i> เพิ่มตลาด
+                            </button>
+                        </div>
+                        <div id="markets-list" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                            <!-- JS loaded -->
+                        </div>
+                    </div>
+
+                    <!-- Candidate Locations -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+                        <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                            <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wide text-indigo-600 flex items-center gap-2">
+                                <i class="fa-solid fa-industry"></i> ทำเลที่ตั้งที่พิจารณา (Candidates)
+                            </h3>
+                            <button onclick="addCandidateNode()" class="text-xs text-sky-600 hover:text-sky-800 font-medium">
+                                <i class="fa-solid fa-plus"></i> เพิ่มทำเล
+                            </button>
+                        </div>
+                        <div id="candidates-list" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                            <!-- JS loaded -->
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Right Panel: Light Canvas Grid & Separated Tables -->
+                <div class="lg:col-span-7 space-y-6">
+                    
+                    <!-- Overall Decision Summary Card -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2 border-b border-slate-100 pb-2">
+                            <i class="fa-solid fa-trophy text-amber-500"></i> สรุปผลการเปรียบเทียบค่าขนส่งรวมทุกทำเล
+                        </h3>
+
+                        <div id="coord-summary-cards" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <!-- Populated dynamically via JS -->
+                        </div>
+
+                        <!-- Decision Banner -->
+                        <div id="coord-decision-box" class="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-start gap-3">
+                            <div class="text-emerald-600 text-xl mt-0.5"><i class="fa-solid fa-circle-check"></i></div>
+                            <div>
+                                <h4 class="font-bold text-emerald-900 text-sm">สรุปการตัดสินใจเลือกทำเล</h4>
+                                <p id="coord-decision-text" class="text-xs text-emerald-800 mt-1">กำลังคำนวณ...</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Separated Canvas Graphs and Tables Container for Each Candidate -->
+                    <div id="coord-candidate-tables-container" class="space-y-6">
+                        <!-- Individual visualizer graphs and tables generated per Candidate by JS -->
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <section id="vam-tab" class="tab-content hidden space-y-6">
+            <!-- Header & Presets -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+                        <i class="fa-solid fa-table-cells text-sky-600"></i>
+                        กรณีที่ 3: โรงงานหลายแห่ง ทำเลจำกัด (วิธี Vogel's Approximation Method: VAM)
+                    </h2>
+                    <p class="text-sm text-slate-500 mt-1">
+                        สามารถ <span class="font-semibold text-emerald-600">เพิ่ม/ลบ โรงงานเดิม ตลาด หรือทางเลือกใหม่</span> และเปลี่ยน <span class="font-semibold text-amber-700">อัตราค่าขนส่ง (บาท:หน่วย)</span> ได้โดยตรง
+                    </p>
+                </div>
+
+                <!-- Presets -->
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">ตัวอย่างโจทย์:</span>
+                    <button onclick="loadVampreset('ex5')" class="px-3 py-1.5 bg-slate-100 hover:bg-sky-100 hover:text-sky-700 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition">
+                        <i class="fa-solid fa-bookmark text-sky-500 mr-1"></i> ตัวอย่างที่ 5 (นครปฐม vs ราชบุรี)
+                    </button>
+                    <button onclick="loadVampreset('hw2')" class="px-3 py-1.5 bg-slate-100 hover:bg-sky-100 hover:text-sky-700 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition">
+                        <i class="fa-solid fa-pen-to-square text-amber-500 mr-1"></i> การบ้านข้อ 2 (ท่าจีน vs โกรกกราก)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Configuration & Interactive VAM Matrix Tables -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left Setup Panel with Add/Delete Buttons -->
+                <div class="lg:col-span-4 space-y-5">
+                    <!-- Existing Plants Setup -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                        <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                            <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wide flex items-center gap-2">
+                                <i class="fa-solid fa-industry text-sky-600"></i> โรงงานเดิม & กำลังผลิต
+                            </h3>
+                            <button onclick="addVamPlant()" class="text-xs text-sky-600 hover:text-sky-800 font-medium flex items-center gap-1">
+                                <i class="fa-solid fa-plus"></i> เพิ่มโรงงาน
+                            </button>
+                        </div>
+                        <div id="vam-existing-plants" class="space-y-3">
+                            <!-- Dynamic Input via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Market Demands Setup -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                        <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                            <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wide flex items-center gap-2">
+                                <i class="fa-solid fa-store text-emerald-600"></i> ความต้องการตลาด (Demands)
+                            </h3>
+                            <button onclick="addVamMarket()" class="text-xs text-sky-600 hover:text-sky-800 font-medium flex items-center gap-1">
+                                <i class="fa-solid fa-plus"></i> เพิ่มตลาด
+                            </button>
+                        </div>
+                        <div id="vam-markets-demand" class="space-y-3">
+                            <!-- Dynamic Input via JS -->
+                        </div>
+                    </div>
+
+                    <!-- Candidate Option Names & Capacity Setup -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                        <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                            <h3 class="font-bold text-slate-800 text-sm uppercase tracking-wide flex items-center gap-2">
+                                <i class="fa-solid fa-location-dot text-indigo-600"></i> ทำเลทางเลือกโรงงานใหม่
+                            </h3>
+                            <button onclick="addVamCandidateOption()" class="text-xs text-sky-600 hover:text-sky-800 font-medium flex items-center gap-1">
+                                <i class="fa-solid fa-plus"></i> เพิ่มทางเลือก
+                            </button>
+                        </div>
+                        <div id="vam-candidate-options" class="space-y-3">
+                            <!-- Dynamic Input via JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Dynamic Matrix Tables for All Candidates -->
+                <div class="lg:col-span-8 space-y-6">
+                    
+                    <div id="vam-candidate-solutions-container" class="space-y-6">
+                        <!-- Solution matrices generated dynamically per Candidate Option -->
+                    </div>
+
+                    <!-- VAM Final Decision Box -->
+                    <div id="vam-decision-box" class="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-start gap-4">
+                        <div class="text-emerald-600 text-2xl mt-0.5"><i class="fa-solid fa-trophy"></i></div>
+                        <div>
+                            <h4 class="font-bold text-emerald-900 text-base">ผลการตัดสินใจเลือกทำเลที่ตั้งที่ดีที่สุด</h4>
+                            <p id="vam-decision-text" class="text-sm text-emerald-800 mt-1">กำลังคำนวณ...</p>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <section id="breakeven-tab" class="tab-content hidden space-y-6">
+            <!-- Header & Presets -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-line text-sky-600"></i>
+                        การวิเคราะห์จุดคุ้มทุนของทำเลที่ตั้ง (Location Break-Even Analysis)
+                    </h2>
+                    <p class="text-sm text-slate-500 mt-1">
+                        สมการต้นทุนรวม: <span class="font-mono text-sky-700 font-semibold">Total Cost = Fixed Cost + (Variable Cost × Q)</span> | จุดคุ้มทุน: <span class="font-mono text-emerald-700 font-semibold">Q = FC / (Price - VC)</span>
+                    </p>
+                </div>
+
+                <button onclick="loadBreakevenPreset('ex3')" class="px-3 py-1.5 bg-slate-100 hover:bg-sky-100 hover:text-sky-700 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition">
+                    <i class="fa-solid fa-bookmark text-sky-500 mr-1"></i> โหลดตัวอย่างที่ 3 (หน้า 12)
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <!-- Left Input Controls -->
+                <div class="lg:col-span-4 space-y-5">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                        <h3 class="font-bold text-slate-800 border-b border-slate-100 pb-2 text-sm uppercase tracking-wide flex items-center gap-2">
+                            <i class="fa-solid fa-tag text-sky-600"></i> ราคาสินค้าขายต่อหน่วย
+                        </h3>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">ราคาขาย (บาท/หน่วย)</label>
+                            <input type="number" id="be-price" value="10" oninput="calculateBreakEven()" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 focus:outline-none">
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                        <h3 class="font-bold text-slate-800 border-b border-slate-100 pb-2 text-sm uppercase tracking-wide flex items-center gap-2">
+                            <i class="fa-solid fa-building text-indigo-600"></i> ต้นทุนของทำเลที่ตั้ง A, B, C
+                        </h3>
+                        
+                        <!-- Location A -->
+                        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                            <span class="font-bold text-xs text-sky-700">ทำเลที่ตั้ง A</span>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[11px] text-slate-500">ต้นทุนคงที่ (บาท)</label>
+                                    <input type="number" id="be-fc-a" value="5000" oninput="calculateBreakEven()" class="w-full px-2 py-1.5 border rounded text-xs">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] text-slate-500">ต้นทุนแปรผัน (บาท/หน่วย)</label>
+                                    <input type="number" id="be-vc-a" value="8" oninput="calculateBreakEven()" class="w-full px-2 py-1.5 border rounded text-xs">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Location B -->
+                        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                            <span class="font-bold text-xs text-indigo-700">ทำเลที่ตั้ง B</span>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[11px] text-slate-500">ต้นทุนคงที่ (บาท)</label>
+                                    <input type="number" id="be-fc-b" value="6000" oninput="calculateBreakEven()" class="w-full px-2 py-1.5 border rounded text-xs">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] text-slate-500">ต้นทุนแปรผัน (บาท/หน่วย)</label>
+                                    <input type="number" id="be-vc-b" value="4" oninput="calculateBreakEven()" class="w-full px-2 py-1.5 border rounded text-xs">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Location C -->
+                        <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                            <span class="font-bold text-xs text-amber-700">ทำเลที่ตั้ง C</span>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-[11px] text-slate-500">ต้นทุนคงที่ (บาท)</label>
+                                    <input type="number" id="be-fc-c" value="8000" oninput="calculateBreakEven()" class="w-full px-2 py-1.5 border rounded text-xs">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] text-slate-500">ต้นทุนแปรผัน (บาท/หน่วย)</label>
+                                    <input type="number" id="be-vc-c" value="5" oninput="calculateBreakEven()" class="w-full px-2 py-1.5 border rounded text-xs">
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- Right Break-Even Chart & Result Table -->
+                <div class="lg:col-span-8 space-y-6">
+                    <!-- Chart.js Graph -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-chart-area text-sky-600"></i> กราฟเปรียบเทียบเส้นต้นทุนรวมและเส้นรายได้ (Break-Even Graph)
+                        </h3>
+                        <div class="relative w-full h-80">
+                            <canvas id="beChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Break-Even Points Summary Table -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                        <h3 class="font-bold text-slate-800 text-sm border-b border-slate-100 pb-2">
+                            ตารางสรุปจุดคุ้มทุน (Break-Even Quantity)
+                        </h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs text-left">
+                                <thead>
+                                    <tr class="bg-slate-100 font-semibold text-slate-700">
+                                        <th class="p-2.5">ทำเลที่ตั้ง</th>
+                                        <th class="p-2.5">สูตรคำนวณ [FC ÷ (Price - VC)]</th>
+                                        <th class="p-2.5">ปริมาณ ณ จุดคุ้มทุน (หน่วย)</th>
+                                        <th class="p-2.5">รายได้ ณ จุดคุ้มทุน (บาท)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="be-summary-tbody" class="divide-y divide-slate-100">
+                                    <!-- Dynamic Populated -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div id="be-recommendation" class="p-4 bg-sky-50 rounded-xl border border-sky-200 text-xs text-sky-900">
+                            <!-- JS populated -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="npv-tab" class="tab-content hidden space-y-6">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div>
+                    <h2 class="text-xl font-bold text-slate-900 flex items-center gap-2">
+                        <i class="fa-solid fa-calculator text-sky-600"></i>
+                        การเปรียบเทียบต้นทุนรวมและปรับมูลค่าปัจจุบัน (Net Present Value - NPV Method)
+                    </h2>
+                    <p class="text-sm text-slate-500 mt-1">
+                        คำนวณมูลค่าปัจจุบันรวม (NPV Total Cost = Fixed Cost + [Annual Variable Cost × P/A Multiplier])
+                    </p>
+                </div>
+
+                <button onclick="loadNpvPreset('ex2')" class="px-3 py-1.5 bg-slate-100 hover:bg-sky-100 hover:text-sky-700 text-slate-700 rounded-lg text-xs font-medium border border-slate-200 transition">
+                    <i class="fa-solid fa-bookmark text-sky-500 mr-1"></i> โหลดตัวอย่างที่ 2 (หน้า 8-11)
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div class="lg:col-span-4 space-y-5">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                        <h3 class="font-bold text-slate-800 border-b border-slate-100 pb-2 text-sm uppercase tracking-wide flex items-center gap-2">
+                            <i class="fa-solid fa-percent text-sky-600"></i> อัตราดอกเบี้ย & อายุโครงการ
+                        </h3>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">อายุใช้งาน (ปี)</label>
+                                <input type="number" id="npv-years" value="20" oninput="calculateNPV()" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">อัตราดอกเบี้ย (%)</label>
+                                <input type="number" id="npv-interest" value="15" oninput="calculateNPV()" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-600 mb-1">ตัวคูณปรับมูลค่าปัจจุบัน (P/A Multiplier)</label>
+                            <input type="number" id="npv-factor" value="6.26" step="0.01" oninput="calculateNPV()" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 font-bold text-sky-700">
+                            <span class="text-[11px] text-slate-400">สามารถแก้ค่าตัวคูณเปิดตารางได้โดยตรง</span>
+                        </div>
+                    </div>
+
+                    <!-- Fixed Costs Input -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+                        <h3 class="font-bold text-slate-800 text-sm border-b border-slate-100 pb-2 uppercase tracking-wide text-indigo-600">
+                            ต้นทุนในการจัดตั้งโรงงาน (Fixed Cost - พันบาท)
+                        </h3>
+                        <div class="space-y-2">
+                            <div class="grid grid-cols-4 gap-2 text-xs font-semibold text-slate-500">
+                                <span class="col-span-1">ทำเล</span>
+                                <span class="text-center">ทำเล A</span>
+                                <span class="text-center">ทำเล B</span>
+                                <span class="text-center">ทำเล C</span>
+                            </div>
+                            <div class="grid grid-cols-4 gap-2 items-center text-xs">
+                                <span class="text-slate-600">Fixed Cost รวม</span>
+                                <input type="number" id="npv-fc-a" value="8700" oninput="calculateNPV()" class="px-2 py-1 border rounded text-center">
+                                <input type="number" id="npv-fc-b" value="6850" oninput="calculateNPV()" class="px-2 py-1 border rounded text-center">
+                                <input type="number" id="npv-fc-c" value="8000" oninput="calculateNPV()" class="px-2 py-1 border rounded text-center">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Variable Costs Input -->
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-3">
+                        <h3 class="font-bold text-slate-800 text-sm border-b border-slate-100 pb-2 uppercase tracking-wide text-amber-600">
+                            ค่าใช้จ่ายดำเนินงานต่อปี (Annual Variable Cost - พันบาท)
+                        </h3>
+                        <div class="space-y-2">
+                            <div class="grid grid-cols-4 gap-2 text-xs font-semibold text-slate-500">
+                                <span class="col-span-1">ทำเล</span>
+                                <span class="text-center">ทำเล A</span>
+                                <span class="text-center">ทำเล B</span>
+                                <span class="text-center">ทำเล C</span>
+                            </div>
+                            <div class="grid grid-cols-4 gap-2 items-center text-xs">
+                                <span class="text-slate-600">Annual VC รวม</span>
+                                <input type="number" id="npv-vc-a" value="2200" oninput="calculateNPV()" class="px-2 py-1 border rounded text-center">
+                                <input type="number" id="npv-vc-b" value="2600" oninput="calculateNPV()" class="px-2 py-1 border rounded text-center">
+                                <input type="number" id="npv-vc-c" value="1800" oninput="calculateNPV()" class="px-2 py-1 border rounded text-center">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NPV Results -->
+                <div class="lg:col-span-8 space-y-6">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                        <h3 class="font-bold text-slate-800 text-sm border-b border-slate-100 pb-2 flex items-center gap-2">
+                            <i class="fa-solid fa-table text-sky-600"></i> ตารางคำนวณแปลงมูลค่าปัจจุบัน (NPV Summary Table)
+                        </h3>
+
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-100 font-semibold text-slate-700">
+                                        <th class="p-3">รายการ (หน่วย: พันบาท)</th>
+                                        <th class="p-3 text-center">ทำเลที่ตั้ง A</th>
+                                        <th class="p-3 text-center">ทำเลที่ตั้ง B</th>
+                                        <th class="p-3 text-center">ทำเลที่ตั้ง C</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    <tr>
+                                        <td class="p-3 font-medium text-slate-700">1. ค่าใช้จ่ายดำเนินงานรายปี (Variable Cost)</td>
+                                        <td id="res-npv-vc-a" class="p-3 text-center font-mono">0</td>
+                                        <td id="res-npv-vc-b" class="p-3 text-center font-mono">0</td>
+                                        <td id="res-npv-vc-c" class="p-3 text-center font-mono">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-3 font-medium text-slate-700">2. ตัวคูณปรับมูลค่าปัจจุบัน (P/A Factor)</td>
+                                        <td id="res-npv-factor-a" class="p-3 text-center font-mono">6.26</td>
+                                        <td id="res-npv-factor-b" class="p-3 text-center font-mono">6.26</td>
+                                        <td id="res-npv-factor-c" class="p-3 text-center font-mono">6.26</td>
+                                    </tr>
+                                    <tr class="bg-sky-50/50 font-semibold">
+                                        <td class="p-3 text-sky-900">3. มูลค่าปัจจุบันของค่าใช้จ่ายดำเนินงาน (PV of VC)</td>
+                                        <td id="res-npv-pvvc-a" class="p-3 text-center font-mono text-sky-800">0</td>
+                                        <td id="res-npv-pvvc-b" class="p-3 text-center font-mono text-sky-800">0</td>
+                                        <td id="res-npv-pvvc-c" class="p-3 text-center font-mono text-sky-800">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="p-3 font-medium text-slate-700">4. บวก: ต้นทุนในการจัดตั้งโรงงาน (Fixed Cost)</td>
+                                        <td id="res-npv-fc-a" class="p-3 text-center font-mono">0</td>
+                                        <td id="res-npv-fc-b" class="p-3 text-center font-mono">0</td>
+                                        <td id="res-npv-fc-c" class="p-3 text-center font-mono">0</td>
+                                    </tr>
+                                    <tr class="bg-slate-900 text-white font-bold text-sm">
+                                        <td class="p-3 rounded-l-lg">มูลค่าปัจจุบันรวม (NPV Total Cost)</td>
+                                        <td id="res-npv-tot-a" class="p-3 text-center font-mono text-amber-400">0</td>
+                                        <td id="res-npv-tot-b" class="p-3 text-center font-mono text-amber-400">0</td>
+                                        <td id="res-npv-tot-c" class="p-3 text-center font-mono text-emerald-400 rounded-r-lg">0</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Decision Result -->
+                        <div id="npv-decision-box" class="p-4 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-900">
+                            <!-- Populated via JS -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-slate-400 text-xs py-4 border-t border-slate-800 mt-10">
+        <div class="max-w-7xl mx-auto px-4 text-center">
+            ระบบจำลองและวิเคราะห์การเลือกทำเลที่ตั้งด้วยวิธีตัวแบบขนส่ง (Transportation Model) - บทที่ 5
+        </div>
+    </footer>
+
+    <script>
+        // Global Tab Navigation
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-sky-600', 'text-white');
+                btn.classList.add('text-slate-300', 'hover:text-white', 'hover:bg-slate-800');
+            });
+
+            document.getElementById(tabId).classList.remove('hidden');
+            const activeBtn = document.getElementById('nav-' + tabId);
+            if(activeBtn) {
+                activeBtn.classList.add('bg-sky-600', 'text-white');
+                activeBtn.classList.remove('text-slate-300', 'hover:text-white', 'hover:bg-slate-800');
+            }
+
+            if (tabId === 'coord-tab') drawAllCandidateCanvases();
+            if (tabId === 'breakeven-tab') updateBreakevenChart();
+        }
+
+        // =========================================================================
+        // TAB 1: COORDINATE & DISTANCE MODEL LOGIC
+        // =========================================================================
+
+        let rawMaterials = [
+            { id: 1, name: 'วัตถุดิบ 1', x: 3, y: 6 }
+        ];
+
+        let markets = [
+            { id: 1, name: 'ตลาดสินค้า 1', x: 1, y: 2 },
+            { id: 2, name: 'ตลาดสินค้า 2', x: 6, y: 4 }
+        ];
+
+        let candidates = [
+            { id: 'A', name: 'ทำเล A', x: 2, y: 4 },
+            { id: 'B', name: 'ทำเล B', x: 3, y: 3 },
+            { id: 'C', name: 'ทำเล C', x: 5, y: 5 }
+        ];
+
+        let lastCandidateCalculations = [];
+
+        function renderCoordInputLists() {
+            // Raw materials
+            const rmContainer = document.getElementById('raw-materials-list');
+            rmContainer.innerHTML = rawMaterials.map((rm, idx) => `
+                <div class="flex items-center space-x-2 text-xs bg-slate-50 p-2 rounded-lg border border-slate-200">
+                    <input type="text" value="${rm.name}" onchange="rawMaterials[${idx}].name=this.value; calculateCoordModel();" class="w-1/3 px-2 py-1 border rounded">
+                    <span class="text-slate-400">X:</span>
+                    <input type="number" value="${rm.x}" oninput="rawMaterials[${idx}].x=parseFloat(this.value)||0; calculateCoordModel();" class="w-16 px-1 py-1 border rounded text-center">
+                    <span class="text-slate-400">Y:</span>
+                    <input type="number" value="${rm.y}" oninput="rawMaterials[${idx}].y=parseFloat(this.value)||0; calculateCoordModel();" class="w-16 px-1 py-1 border rounded text-center">
+                    ${rawMaterials.length > 1 ? `<button onclick="removeRawMaterial(${idx})" class="text-red-500 hover:text-red-700 ml-auto"><i class="fa-solid fa-trash"></i></button>` : ''}
+                </div>
+            `).join('');
+
+            // Markets
+            const mContainer = document.getElementById('markets-list');
+            mContainer.innerHTML = markets.map((m, idx) => `
+                <div class="flex items-center space-x-2 text-xs bg-slate-50 p-2 rounded-lg border border-slate-200">
+                    <input type="text" value="${m.name}" onchange="markets[${idx}].name=this.value; calculateCoordModel();" class="w-1/3 px-2 py-1 border rounded">
+                    <span class="text-slate-400">X:</span>
+                    <input type="number" value="${m.x}" oninput="markets[${idx}].x=parseFloat(this.value)||0; calculateCoordModel();" class="w-16 px-1 py-1 border rounded text-center">
+                    <span class="text-slate-400">Y:</span>
+                    <input type="number" value="${m.y}" oninput="markets[${idx}].y=parseFloat(this.value)||0; calculateCoordModel();" class="w-16 px-1 py-1 border rounded text-center">
+                    ${markets.length > 1 ? `<button onclick="removeMarket(${idx})" class="text-red-500 hover:text-red-700 ml-auto"><i class="fa-solid fa-trash"></i></button>` : ''}
+                </div>
+            `).join('');
+
+            // Candidates
+            const cContainer = document.getElementById('candidates-list');
+            cContainer.innerHTML = candidates.map((c, idx) => `
+                <div class="flex items-center space-x-2 text-xs bg-slate-50 p-2 rounded-lg border border-slate-200">
+                    <input type="text" value="${c.name}" onchange="candidates[${idx}].name=this.value; calculateCoordModel();" class="w-1/3 px-2 py-1 border rounded">
+                    <span class="text-slate-400">X:</span>
+                    <input type="number" value="${c.x}" oninput="candidates[${idx}].x=parseFloat(this.value)||0; calculateCoordModel();" class="w-16 px-1 py-1 border rounded text-center">
+                    <span class="text-slate-400">Y:</span>
+                    <input type="number" value="${c.y}" oninput="candidates[${idx}].y=parseFloat(this.value)||0; calculateCoordModel();" class="w-16 px-1 py-1 border rounded text-center">
+                    ${candidates.length > 1 ? `<button onclick="removeCandidate(${idx})" class="text-red-500 hover:text-red-700 ml-auto"><i class="fa-solid fa-trash"></i></button>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function addRawMaterialNode() {
+            rawMaterials.push({ id: rawMaterials.length + 1, name: `วัตถุดิบ ${rawMaterials.length + 1}`, x: 4, y: 4 });
+            calculateCoordModel();
+        }
+        function removeRawMaterial(idx) {
+            rawMaterials.splice(idx, 1);
+            calculateCoordModel();
+        }
+
+        function addMarketNode() {
+            markets.push({ id: markets.length + 1, name: `ตลาดสินค้า ${markets.length + 1}`, x: 5, y: 2 });
+            calculateCoordModel();
+        }
+        function removeMarket(idx) {
+            markets.splice(idx, 1);
+            calculateCoordModel();
+        }
+
+        function addCandidateNode() {
+            const letter = String.fromCharCode(65 + candidates.length);
+            candidates.push({ id: letter, name: `ทำเล ${letter}`, x: 4, y: 5 });
+            calculateCoordModel();
+        }
+        function removeCandidate(idx) {
+            candidates.splice(idx, 1);
+            calculateCoordModel();
+        }
+
+        function calculateCoordModel() {
+            renderCoordInputLists();
+
+            const rate = parseFloat(document.getElementById('coord-rate').value) || 0;
+            const scale = parseFloat(document.getElementById('coord-scale').value) || 1;
+
+            lastCandidateCalculations = candidates.map(cand => {
+                let connections = [];
+                let totalUnitsDistance = 0;
+
+                // Distance to Raw Materials
+                rawMaterials.forEach(rm => {
+                    let unitDist = Math.sqrt(Math.pow(cand.x - rm.x, 2) + Math.pow(cand.y - rm.y, 2));
+                    let kmDist = unitDist * scale;
+                    let cost = kmDist * rate;
+                    totalUnitsDistance += unitDist;
+                    connections.push({
+                        type: 'วัตถุดิบ',
+                        name: rm.name,
+                        x: rm.x,
+                        y: rm.y,
+                        unitDist,
+                        kmDist,
+                        cost
+                    });
+                });
+
+                // Distance to Markets
+                markets.forEach(m => {
+                    let unitDist = Math.sqrt(Math.pow(cand.x - m.x, 2) + Math.pow(cand.y - m.y, 2));
+                    let kmDist = unitDist * scale;
+                    let cost = kmDist * rate;
+                    totalUnitsDistance += unitDist;
+                    connections.push({
+                        type: 'ตลาดสินค้า',
+                        name: m.name,
+                        x: m.x,
+                        y: m.y,
+                        unitDist,
+                        kmDist,
+                        cost
+                    });
+                });
+
+                let totalKm = totalUnitsDistance * scale;
+                let totalCost = totalKm * rate;
+
+                return {
+                    candidate: cand,
+                    connections,
+                    totalUnitsDistance,
+                    totalKm,
+                    totalCost
+                };
+            });
+
+            // Find best candidate
+            let sorted = [...lastCandidateCalculations].sort((a, b) => a.totalCost - b.totalCost);
+            let bestCost = sorted.length > 0 ? sorted[0].totalCost : 0;
+
+            // Render Summary Cards
+            const summaryCardsBox = document.getElementById('coord-summary-cards');
+            summaryCardsBox.innerHTML = lastCandidateCalculations.map(res => {
+                let isBest = res.totalCost === bestCost && lastCandidateCalculations.length > 0;
+                return `
+                    <div class="p-3 rounded-xl border ${isBest ? 'bg-emerald-50 border-emerald-300 ring-2 ring-emerald-500/20' : 'bg-slate-50 border-slate-200'}">
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-xs ${isBest ? 'text-emerald-900' : 'text-slate-700'}">${res.candidate.name}</span>
+                            ${isBest ? '<span class="text-[10px] bg-emerald-600 text-white font-semibold px-2 py-0.5 rounded-full">ต่ำสุด</span>' : ''}
+                        </div>
+                        <div class="text-xs font-mono text-slate-500 mt-1">พิกัด (${res.candidate.x}, ${res.candidate.y})</div>
+                        <div class="text-sm font-bold font-mono ${isBest ? 'text-emerald-700' : 'text-slate-800'} mt-1">
+                            ${res.totalCost.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} บาท
+                        </div>
+                        <div class="text-[11px] text-slate-500 mt-0.5">${res.totalKm.toFixed(1)} กม.</div>
+                    </div>
+                `;
+            }).join('');
+
+            // Render Separate Graphs & Tables for Each Candidate Location
+            const tablesContainer = document.getElementById('coord-candidate-tables-container');
+            tablesContainer.innerHTML = lastCandidateCalculations.map(res => {
+                let isBest = res.totalCost === bestCost && lastCandidateCalculations.length > 0;
+                let candId = res.candidate.id;
+                return `
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border ${isBest ? 'border-emerald-300 ring-2 ring-emerald-500/20' : 'border-slate-200'} space-y-4">
+                        <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                            <h4 class="font-bold text-sm ${isBest ? 'text-emerald-800' : 'text-slate-800'} flex items-center gap-2">
+                                <i class="fa-solid fa-industry ${isBest ? 'text-emerald-600' : 'text-sky-600'}"></i>
+                                ทำเล: ${res.candidate.name} (พิกัด X:${res.candidate.x}, Y:${res.candidate.y})
+                            </h4>
+                            <span class="text-xs font-bold font-mono px-3 py-1 rounded-full ${isBest ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}">
+                                ค่าขนส่งรวม: ${res.totalCost.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} บาท
+                            </span>
+                        </div>
+
+                        <!-- Separate Visualizer Canvas Plot per Candidate -->
+                        <div class="space-y-1">
+                            <div class="flex justify-between items-center text-xs text-slate-500">
+                                <span class="font-medium flex items-center gap-1 text-slate-700">
+                                    <i class="fa-solid fa-map text-sky-600"></i> แผนผังพิกัดและเส้นทางขนส่งเฉพาะ ${res.candidate.name}
+                                </span>
+                                <div class="flex items-center space-x-2 text-[11px]">
+                                    <span class="inline-flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 mr-1"></span>วัตถุดิบ</span>
+                                    <span class="inline-flex items-center"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500 mr-1"></span>ตลาด</span>
+                                    <span class="inline-flex items-center"><span class="w-2.5 h-2.5 bg-indigo-600 mr-1"></span>${res.candidate.name}</span>
+                                </div>
+                            </div>
+                            <div class="relative w-full h-56 sm:h-64 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm grid-bg-light flex items-center justify-center">
+                                <canvas id="coordCanvas_${candId}" class="w-full h-full cursor-crosshair"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Calculation Table -->
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-slate-100 text-slate-700 font-semibold">
+                                        <th class="p-2.5 rounded-l-lg">ประเภท</th>
+                                        <th class="p-2.5">ชื่อปลายทาง</th>
+                                        <th class="p-2.5 text-center">พิกัด (X, Y)</th>
+                                        <th class="p-2.5 text-center">คำนวณระยะทาง d = √[(Δx)² + (Δy)²]</th>
+                                        <th class="p-2.5 text-right">ระยะทาง (กม.)</th>
+                                        <th class="p-2.5 text-right rounded-r-lg">ค่าขนส่ง (บาท)</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    ${res.connections.map(conn => `
+                                        <tr>
+                                            <td class="p-2.5">
+                                                <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${conn.type === 'วัตถุดิบ' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}">
+                                                    ${conn.type}
+                                                </span>
+                                            </td>
+                                            <td class="p-2.5 font-medium text-slate-800">${conn.name}</td>
+                                            <td class="p-2.5 text-center font-mono text-slate-500">(${conn.x}, ${conn.y})</td>
+                                            <td class="p-2.5 text-center font-mono text-slate-600">
+                                                √[(${res.candidate.x}-${conn.x})² + (${res.candidate.y}-${conn.y})²] = ${conn.unitDist.toFixed(2)} หน่วย
+                                            </td>
+                                            <td class="p-2.5 text-right font-mono text-slate-700">${conn.kmDist.toFixed(1)} กม.</td>
+                                            <td class="p-2.5 text-right font-mono font-bold text-slate-800">
+                                                ${conn.cost.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="${isBest ? 'bg-emerald-50 text-emerald-900 font-bold' : 'bg-slate-100 text-slate-800 font-bold'}">
+                                        <td colspan="3" class="p-2.5 rounded-l-lg">ระยะทางรวม และ ค่าขนส่งรวมทั้งหมด</td>
+                                        <td class="p-2.5 text-center font-mono">${res.totalUnitsDistance.toFixed(2)} หน่วย</td>
+                                        <td class="p-2.5 text-right font-mono">${res.totalKm.toFixed(1)} กม.</td>
+                                        <td class="p-2.5 text-right font-mono text-sm rounded-r-lg ${isBest ? 'text-emerald-700' : 'text-slate-900'}">
+                                            ${res.totalCost.toLocaleString('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ฿
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Decision Text
+            if (sorted.length > 0) {
+                const best = sorted[0];
+                document.getElementById('coord-decision-text').innerHTML = `
+                    ควรเลือก <strong>${best.candidate.name} (พิกัด ${best.candidate.x}, ${best.candidate.y})</strong> 
+                    เนื่องจากมีค่าขนส่งรวมต่ำที่สุด อยู่ที่ <strong>${best.totalCost.toLocaleString('th-TH')} บาท</strong> 
+                    (ระยะทางรวม ${best.totalKm.toFixed(1)} กม.)
+                `;
+            }
+
+            drawAllCandidateCanvases();
+        }
+
+        function drawAllCandidateCanvases() {
+            if (!lastCandidateCalculations || lastCandidateCalculations.length === 0) return;
+            lastCandidateCalculations.forEach(res => {
+                drawCoordCanvasForCandidate(res.candidate, res);
+            });
+        }
+
+        function drawCoordCanvasForCandidate(cand, res) {
+            const canvas = document.getElementById(`coordCanvas_${cand.id}`);
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            
+            const rect = canvas.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) return;
+
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+            const width = rect.width;
+            const height = rect.height;
+
+            // Clear with WHITE background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+
+            // Calculate Grid Max Range
+            let allX = [...rawMaterials.map(n=>n.x), ...markets.map(n=>n.x), cand.x, 8];
+            let allY = [...rawMaterials.map(n=>n.y), ...markets.map(n=>n.y), cand.y, 8];
+
+            let maxX = Math.max(...allX) + 1;
+            let maxY = Math.max(...allY) + 1;
+
+            const padding = 30;
+            const graphWidth = width - padding * 2;
+            const graphHeight = height - padding * 2;
+
+            function toCanvasX(x) { return padding + (x / maxX) * graphWidth; }
+            function toCanvasY(y) { return height - padding - (y / maxY) * graphHeight; }
+
+            // Draw Light Grid Lines with LOW OPACITY
+            ctx.strokeStyle = 'rgba(226, 232, 240, 0.8)';
+            ctx.lineWidth = 1;
+            ctx.font = '10px Sarabun';
+            ctx.fillStyle = '#94a3b8';
+
+            for (let x = 0; x <= maxX; x++) {
+                let cx = toCanvasX(x);
+                ctx.beginPath();
+                ctx.moveTo(cx, padding);
+                ctx.lineTo(cx, height - padding);
+                ctx.stroke();
+                ctx.fillText(x, cx - 3, height - padding + 14);
+            }
+
+            for (let y = 0; y <= maxY; y++) {
+                let cy = toCanvasY(y);
+                ctx.beginPath();
+                ctx.moveTo(padding, cy);
+                ctx.lineTo(width - padding, cy);
+                ctx.stroke();
+                ctx.fillText(y, padding - 16, cy + 3);
+            }
+
+            // Draw Dark Axes
+            ctx.strokeStyle = '#cbd5e1';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(padding, padding);
+            ctx.lineTo(padding, height - padding);
+            ctx.lineTo(width - padding, height - padding);
+            ctx.stroke();
+
+            // Draw Connecting Lines ONLY from THIS candidate to targets
+            let cx = toCanvasX(cand.x);
+            let cy = toCanvasY(cand.y);
+
+            ctx.strokeStyle = 'rgba(2, 132, 199, 0.6)';
+            ctx.setLineDash([4, 4]);
+            ctx.lineWidth = 2;
+
+            [...rawMaterials, ...markets].forEach(target => {
+                let tx = toCanvasX(target.x);
+                let ty = toCanvasY(target.y);
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(tx, ty);
+                ctx.stroke();
+            });
+            ctx.setLineDash([]);
+
+            // Draw Raw Material Nodes
+            rawMaterials.forEach(rm => {
+                let rmx = toCanvasX(rm.x);
+                let rmy = toCanvasY(rm.y);
+                ctx.fillStyle = '#f59e0b';
+                ctx.beginPath();
+                ctx.arc(rmx, rmy, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.fillStyle = '#1e293b';
+                ctx.font = 'bold 11px Sarabun';
+                ctx.fillText(`${rm.name} (${rm.x},${rm.y})`, rmx + 8, rmy + 3);
+            });
+
+            // Draw Market Nodes
+            markets.forEach(m => {
+                let mx = toCanvasX(m.x);
+                let my = toCanvasY(m.y);
+                ctx.fillStyle = '#10b981';
+                ctx.beginPath();
+                ctx.arc(mx, my, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.fillStyle = '#1e293b';
+                ctx.font = 'bold 11px Sarabun';
+                ctx.fillText(`${m.name} (${m.x},${m.y})`, mx + 8, my + 3);
+            });
+
+            // Draw THIS Candidate Node Prominently
+            ctx.fillStyle = '#4f46e5';
+            ctx.beginPath();
+            ctx.rect(cx - 7, cy - 7, 14, 14);
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.fillStyle = '#312e81';
+            ctx.font = 'bold 12px Sarabun';
+            ctx.fillText(`${cand.name} (${cand.x},${cand.y})`, cx + 10, cy + 4);
+        }
+
+        // Preset Loaders for Coord Model
+        function loadCoordPreset(type) {
+            if (type === 'ex4') {
+                document.getElementById('coord-rate').value = 10;
+                document.getElementById('coord-scale').value = 100;
+                rawMaterials = [{ id: 1, name: 'วัตถุดิบ', x: 3, y: 6 }];
+                markets = [
+                    { id: 1, name: 'ตลาดสินค้า 1', x: 1, y: 2 },
+                    { id: 2, name: 'ตลาดสินค้า 2', x: 6, y: 4 }
+                ];
+                candidates = [
+                    { id: 'A', name: 'ทำเล A', x: 2, y: 4 },
+                    { id: 'B', name: 'ทำเล B', x: 3, y: 3 },
+                    { id: 'C', name: 'ทำเล C', x: 5, y: 5 }
+                ];
+            } else if (type === 'hw1') {
+                document.getElementById('coord-rate').value = 50;
+                document.getElementById('coord-scale').value = 1;
+                rawMaterials = [
+                    { id: 1, name: 'ห้องแช่เย็น 1', x: 2, y: 3 },
+                    { id: 2, name: 'ห้องแช่เย็น 2', x: 5, y: 2 },
+                    { id: 3, name: 'ห้องแช่เย็น 3', x: 7, y: 7 }
+                ];
+                markets = [];
+                candidates = [
+                    { id: 'A', name: 'จุด A', x: 4, y: 6 },
+                    { id: 'B', name: 'จุด B', x: 4, y: 4 },
+                    { id: 'C', name: 'จุด C', x: 6, y: 5 }
+                ];
+            }
+            calculateCoordModel();
+        }
+
+
+        // =========================================================================
+        // TAB 2: VAM TRANSPORTATION MODEL LOGIC (DYNAMIC PLANTS/MARKETS/OPTIONS)
+        // =========================================================================
+
+        let vamData = {
+            existingPlants: [
+                { name: 'โรงงาน A (สมุทรสาคร)', cap: 200 },
+                { name: 'โรงงาน B (สมุทรสงคราม)', cap: 100 }
+            ],
+            markets: [
+                { name: 'ตลาดสินค้า 1', demand: 200 },
+                { name: 'ตลาดสินค้า 2', demand: 200 }
+            ],
+            candidateOptions: [
+                {
+                    name: 'โรงงาน C (นครปฐม)',
+                    cap: 100,
+                    rates: [
+                        [1, 2], // Plant A -> M1, M2
+                        [2, 3], // Plant B -> M1, M2
+                        [3, 5]  // Plant C -> M1, M2
+                    ]
+                },
+                {
+                    name: 'โรงงาน C (ราชบุรี)',
+                    cap: 100,
+                    rates: [
+                        [1, 2],
+                        [2, 2],
+                        [4, 1]
+                    ]
+                }
+            ]
+        };
+
+        function addVamPlant() {
+            const idx = vamData.existingPlants.length + 1;
+            const letter = String.fromCharCode(64 + idx);
+            vamData.existingPlants.push({ name: `โรงงาน ${letter}`, cap: 100 });
+            // Resize rates for all options
+            vamData.candidateOptions.forEach(opt => {
+                opt.rates.splice(opt.rates.length - 1, 0, Array(vamData.markets.length).fill(1));
+            });
+            solveVamModel();
+        }
+
+        function removeVamPlant(i) {
+            if (vamData.existingPlants.length <= 1) return;
+            vamData.existingPlants.splice(i, 1);
+            vamData.candidateOptions.forEach(opt => {
+                opt.rates.splice(i, 1);
+            });
+            solveVamModel();
+        }
+
+        function addVamMarket() {
+            const idx = vamData.markets.length + 1;
+            vamData.markets.push({ name: `ตลาดสินค้า ${idx}`, demand: 100 });
+            // Expand columns for all options
+            vamData.candidateOptions.forEach(opt => {
+                opt.rates.forEach(row => row.push(1));
+            });
+            solveVamModel();
+        }
+
+        function removeVamMarket(i) {
+            if (vamData.markets.length <= 1) return;
+            vamData.markets.splice(i, 1);
+            vamData.candidateOptions.forEach(opt => {
+                opt.rates.forEach(row => row.splice(i, 1));
+            });
+            solveVamModel();
+        }
+
+        function addVamCandidateOption() {
+            const idx = vamData.candidateOptions.length + 1;
+            const numRows = vamData.existingPlants.length + 1;
+            const numCols = vamData.markets.length;
+            let newRates = Array(numRows).fill(0).map(() => Array(numCols).fill(1));
+            vamData.candidateOptions.push({
+                name: `ทางเลือกที่ ${idx}`,
+                cap: 100,
+                rates: newRates
+            });
+            solveVamModel();
+        }
+
+        function removeVamCandidateOption(i) {
+            if (vamData.candidateOptions.length <= 1) return;
+            vamData.candidateOptions.splice(i, 1);
+            solveVamModel();
+        }
+
+        function renderVamControls() {
+            // Existing Plants
+            const pBox = document.getElementById('vam-existing-plants');
+            pBox.innerHTML = vamData.existingPlants.map((p, i) => `
+                <div class="flex items-center space-x-2 text-xs bg-slate-50 p-2 rounded-lg border border-slate-200">
+                    <input type="text" value="${p.name}" onchange="vamData.existingPlants[${i}].name=this.value; solveVamModel();" class="flex-grow px-2 py-1 border rounded">
+                    <span class="text-slate-500">ผลิต:</span>
+                    <input type="number" value="${p.cap}" oninput="vamData.existingPlants[${i}].cap=parseFloat(this.value)||0; solveVamModel();" class="w-16 px-1 py-1 border rounded text-center">
+                    ${vamData.existingPlants.length > 1 ? `<button onclick="removeVamPlant(${i})" class="text-red-500 hover:text-red-700 ml-1" title="ลบโรงงาน"><i class="fa-solid fa-trash"></i></button>` : ''}
+                </div>
+            `).join('');
+
+            // Markets
+            const mBox = document.getElementById('vam-markets-demand');
+            mBox.innerHTML = vamData.markets.map((m, i) => `
+                <div class="flex items-center space-x-2 text-xs bg-slate-50 p-2 rounded-lg border border-slate-200">
+                    <input type="text" value="${m.name}" onchange="vamData.markets[${i}].name=this.value; solveVamModel();" class="flex-grow px-2 py-1 border rounded">
+                    <span class="text-slate-500">ต้องการ:</span>
+                    <input type="number" value="${m.demand}" oninput="vamData.markets[${i}].demand=parseFloat(this.value)||0; solveVamModel();" class="w-16 px-1 py-1 border rounded text-center">
+                    ${vamData.markets.length > 1 ? `<button onclick="removeVamMarket(${i})" class="text-red-500 hover:text-red-700 ml-1" title="ลบตลาด"><i class="fa-solid fa-trash"></i></button>` : ''}
+                </div>
+            `).join('');
+
+            // Candidate Options
+            const cBox = document.getElementById('vam-candidate-options');
+            cBox.innerHTML = vamData.candidateOptions.map((c, i) => `
+                <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 text-xs">
+                    <div class="flex items-center justify-between font-bold text-sky-800">
+                        <span class="whitespace-nowrap mr-1">ทางเลือก ${i+1}:</span>
+                        <input type="text" value="${c.name}" onchange="vamData.candidateOptions[${i}].name=this.value; solveVamModel();" class="flex-grow px-2 py-1 border rounded">
+                        ${vamData.candidateOptions.length > 1 ? `<button onclick="removeVamCandidateOption(${i})" class="text-red-500 hover:text-red-700 ml-2" title="ลบทางเลือก"><i class="fa-solid fa-trash"></i></button>` : ''}
+                    </div>
+                    <div class="flex items-center space-x-2 text-slate-600">
+                        <span>กำลังผลิตเพิ่ม:</span>
+                        <input type="number" value="${c.cap}" oninput="vamData.candidateOptions[${i}].cap=parseFloat(this.value)||0; solveVamModel();" class="w-20 px-2 py-1 border rounded text-center">
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function solveVamModel() {
+            renderVamControls();
+
+            const solutionsContainer = document.getElementById('vam-candidate-solutions-container');
+            solutionsContainer.innerHTML = '';
+
+            let solvedResults = vamData.candidateOptions.map((opt, optIdx) => {
+                const sol = solveVamForOption(optIdx);
+                renderVamOptionCard(optIdx, sol);
+                return { optIdx, name: opt.name, totalCost: sol.totalCost };
+            });
+
+            // Find best option
+            let sorted = [...solvedResults].sort((a, b) => a.totalCost - b.totalCost);
+
+            // Final VAM Decision Box
+            const decBox = document.getElementById('vam-decision-text');
+            if (sorted.length > 0) {
+                const best = sorted[0];
+                const secondBest = sorted.length > 1 ? sorted[1] : null;
+                let diffText = secondBest ? ` (ประหยัดกว่า ${secondBest.name} อยู่ ${(secondBest.totalCost - best.totalCost).toLocaleString('th-TH')} บาท)` : '';
+                decBox.innerHTML = `ควรเลือกจัดตั้ง <strong>${best.name}</strong> เนื่องจากให้ค่าขนส่งรวมทั้งระบบต่ำที่สุด คือ <strong>${best.totalCost.toLocaleString('th-TH')} บาท</strong>${diffText}`;
+            }
+        }
+
+        function updateVamRate(optIdx, plantIdx, marketIdx, newRate) {
+            let val = parseFloat(newRate) || 0;
+            vamData.candidateOptions[optIdx].rates[plantIdx][marketIdx] = val;
+            solveVamModel();
+        }
+
+        function solveVamForOption(optIdx) {
+            const candidate = vamData.candidateOptions[optIdx];
+            const plants = [...vamData.existingPlants, { name: candidate.name, cap: candidate.cap }];
+            const markets = vamData.markets;
+            const rates = candidate.rates;
+
+            let numRows = plants.length;
+            let numCols = markets.length;
+
+            // Ensure rates matrix dimensions match plants x markets
+            while (rates.length < numRows) {
+                rates.push(Array(numCols).fill(1));
+            }
+            rates.forEach(row => {
+                while (row.length < numCols) row.push(1);
+            });
+
+            let alloc = Array(numRows).fill(0).map(() => Array(numCols).fill(0));
+            let tempSupply = plants.map(p => p.cap);
+            let tempDemand = markets.map(m => m.demand);
+
+            // VAM Priority Loop simulation
+            for (let step = 0; step < 25; step++) {
+                let maxPen = -1;
+                let targetR = -1;
+                let targetC = -1;
+
+                // Find row penalties
+                for (let r = 0; r < numRows; r++) {
+                    if (tempSupply[r] <= 0) continue;
+                    let activeCols = [];
+                    for (let c = 0; c < numCols; c++) {
+                        if (tempDemand[c] > 0) activeCols.push({ c, cost: rates[r][c] });
+                    }
+                    activeCols.sort((a,b) => a.cost - b.cost);
+                    let pen = activeCols.length > 1 ? activeCols[1].cost - activeCols[0].cost : (activeCols.length === 1 ? activeCols[0].cost : -1);
+                    if (pen > maxPen) {
+                        maxPen = pen;
+                        targetR = r;
+                        targetC = activeCols[0].c;
+                    }
+                }
+
+                // Find col penalties
+                for (let c = 0; c < numCols; c++) {
+                    if (tempDemand[c] <= 0) continue;
+                    let activeRows = [];
+                    for (let r = 0; r < numRows; r++) {
+                        if (tempSupply[r] > 0) activeRows.push({ r, cost: rates[r][c] });
+                    }
+                    activeRows.sort((a,b) => a.cost - b.cost);
+                    let pen = activeRows.length > 1 ? activeRows[1].cost - activeRows[0].cost : (activeRows.length === 1 ? activeRows[0].cost : -1);
+                    if (pen > maxPen) {
+                        maxPen = pen;
+                        targetR = activeRows[0].r;
+                        targetC = c;
+                    }
+                }
+
+                if (targetR !== -1 && targetC !== -1) {
+                    let qty = Math.min(tempSupply[targetR], tempDemand[targetC]);
+                    alloc[targetR][targetC] = qty;
+                    tempSupply[targetR] -= qty;
+                    tempDemand[targetC] -= qty;
+                } else {
+                    // Residual greedy fill
+                    for (let r = 0; r < numRows; r++) {
+                        for (let c = 0; c < numCols; c++) {
+                            if (tempSupply[r] > 0 && tempDemand[c] > 0) {
+                                let qty = Math.min(tempSupply[r], tempDemand[c]);
+                                alloc[r][c] += qty;
+                                tempSupply[r] -= qty;
+                                tempDemand[c] -= qty;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Total cost
+            let totalCost = 0;
+            for (let r = 0; r < numRows; r++) {
+                for (let c = 0; c < numCols; c++) {
+                    totalCost += alloc[r][c] * rates[r][c];
+                }
+            }
+
+            return {
+                plants,
+                markets,
+                rates,
+                alloc,
+                totalCost
+            };
+        }
+
+        function renderVamOptionCard(optIdx, sol) {
+            const container = document.getElementById('vam-candidate-solutions-container');
+            const candName = vamData.candidateOptions[optIdx].name;
+
+            const cardHtml = `
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-100 pb-2">
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-sky-500 inline-block"></span>
+                            ทางเลือกที่ ${optIdx + 1}: <span class="text-sky-700 font-bold">${candName}</span>
+                        </h3>
+                        <span class="text-xs bg-sky-50 text-sky-700 px-3 py-1 rounded-full font-semibold border border-sky-200">
+                            ค่าขนส่งรวมทั้งระบบ: <span class="text-sm font-bold">${sol.totalCost.toLocaleString('th-TH')}</span> บาท
+                        </span>
+                    </div>
+
+                    <p class="text-xs text-amber-700 bg-amber-50 p-2 rounded-lg border border-amber-200">
+                        <i class="fa-solid fa-pen-to-square mr-1"></i> กรอกอัตราค่าขนส่ง (บาท:หน่วย) ในกล่องสีส้ม <span class="font-bold border bg-white px-1 border-amber-400 rounded">C<sub>ij</sub></span> เพื่อเปลี่ยนราคาตามโจทย์ได้เลย
+                    </p>
+
+                    <!-- Matrix Table -->
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-center border-collapse">
+                            <thead>
+                                <tr class="bg-slate-100 text-slate-700 font-semibold">
+                                    <th class="p-2.5 text-left border">จากโรงงาน \ ไปตลาด</th>
+                                    ${sol.markets.map(m => `<th class="p-2.5 border">${m.name}</th>`).join('')}
+                                    <th class="p-2.5 bg-slate-200 border">กำลังผลิตรวม</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-200">
+                                ${sol.plants.map((p, r) => `
+                                    <tr>
+                                        <td class="p-2.5 font-semibold text-slate-800 text-left bg-slate-50 border">${p.name}</td>
+                                        ${sol.markets.map((m, c) => {
+                                            let qty = sol.alloc[r][c];
+                                            let unitCost = sol.rates[r][c];
+                                            return `
+                                                <td class="p-2.5 relative border ${qty > 0 ? 'bg-sky-50/80 font-bold text-sky-900' : 'text-slate-400 bg-white'}">
+                                                    <div class="flex items-center justify-end space-x-1 mb-1">
+                                                        <span class="text-[10px] text-slate-400">อัตรา:</span>
+                                                        <input type="number" value="${unitCost}" 
+                                                            oninput="updateVamRate(${optIdx}, ${r}, ${c}, this.value)" 
+                                                            title="แก้ไขอัตราค่าขนส่ง (บาท:หน่วย) จาก ${p.name} ไป ${m.name}" 
+                                                            class="w-12 px-1 py-0.5 text-right font-mono font-bold text-[11px] text-amber-700 bg-amber-50/80 border border-amber-300 rounded focus:bg-white focus:ring-1 focus:ring-sky-500 focus:outline-none">
+                                                        <span class="text-[10px] text-slate-400">฿</span>
+                                                    </div>
+                                                    <div class="text-sm font-mono font-bold ${qty > 0 ? 'text-sky-800' : 'text-slate-300'}">
+                                                        ${qty > 0 ? qty + ' <span class="text-[10px] font-normal text-slate-500">หน่วย</span>' : '-'}
+                                                    </div>
+                                                </td>
+                                            `;
+                                        }).join('')}
+                                        <td class="p-2.5 font-bold font-mono text-slate-700 bg-slate-100 border">${p.cap}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                            <tfoot>
+                                <tr class="bg-slate-50 font-bold border-t border-slate-200">
+                                    <td class="p-2.5 text-left border">ความต้องการรวม</td>
+                                    ${sol.markets.map(m => `<td class="p-2.5 border font-mono text-slate-800">${m.demand}</td>`).join('')}
+                                    <td class="p-2.5 bg-slate-200 border font-mono text-slate-900">${sol.plants.reduce((sum, p) => sum + p.cap, 0)}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            `;
+
+            container.insertAdjacentHTML('beforeend', cardHtml);
+        }
+
+        function loadVampreset(type) {
+            if (type === 'ex5') {
+                vamData = {
+                    existingPlants: [
+                        { name: 'โรงงาน A (สมุทรสาคร)', cap: 200 },
+                        { name: 'โรงงาน B (สมุทรสงคราม)', cap: 100 }
+                    ],
+                    markets: [
+                        { name: 'ตลาดสินค้า 1', demand: 200 },
+                        { name: 'ตลาดสินค้า 2', demand: 200 }
+                    ],
+                    candidateOptions: [
+                        {
+                            name: 'โรงงาน C (นครปฐม)',
+                            cap: 100,
+                            rates: [ [1, 2], [2, 3], [3, 5] ]
+                        },
+                        {
+                            name: 'โรงงาน C (ราชบุรี)',
+                            cap: 100,
+                            rates: [ [1, 2], [2, 2], [4, 1] ]
+                        }
+                    ]
+                };
+            } else if (type === 'hw2') {
+                vamData = {
+                    existingPlants: [
+                        { name: 'โรงงาน A (ท่าฉลอม)', cap: 300 },
+                        { name: 'โรงงาน B (มหาชัย)', cap: 400 }
+                    ],
+                    markets: [
+                        { name: 'ตลาดสินค้า 1', demand: 300 },
+                        { name: 'ตลาดสินค้า 2', demand: 300 },
+                        { name: 'ตลาดสินค้า 3', demand: 300 }
+                    ],
+                    candidateOptions: [
+                        {
+                            name: 'โรงงาน C (ท่าจีน)',
+                            cap: 200,
+                            rates: [ [2, 2, 3], [3, 2, 4], [3, 2, 6] ]
+                        },
+                        {
+                            name: 'โรงงาน C (โกรกกราก)',
+                            cap: 200,
+                            rates: [ [2, 2, 3], [3, 2, 4], [5, 3, 7] ]
+                        }
+                    ]
+                };
+            }
+            solveVamModel();
+        }
+
+        // =========================================================================
+        // TAB 3: BREAK-EVEN ANALYSIS LOGIC
+        // =========================================================================
+
+        let beChartInstance = null;
+
+        function calculateBreakEven() {
+            const price = parseFloat(document.getElementById('be-price').value) || 10;
+
+            const locA = { name: 'ทำเลที่ตั้ง A', fc: parseFloat(document.getElementById('be-fc-a').value)||0, vc: parseFloat(document.getElementById('be-vc-a').value)||0 };
+            const locB = { name: 'ทำเลที่ตั้ง B', fc: parseFloat(document.getElementById('be-fc-b').value)||0, vc: parseFloat(document.getElementById('be-vc-b').value)||0 };
+            const locC = { name: 'ทำเลที่ตั้ง C', fc: parseFloat(document.getElementById('be-fc-c').value)||0, vc: parseFloat(document.getElementById('be-vc-c').value)||0 };
+
+            const locations = [locA, locB, locC];
+
+            // Summary table
+            const tbody = document.getElementById('be-summary-tbody');
+            let bestBe = null;
+            let minBeQty = Infinity;
+
+            tbody.innerHTML = locations.map(loc => {
+                let margin = price - loc.vc;
+                let beQty = margin > 0 ? loc.fc / margin : 0;
+                let beRev = beQty * price;
+
+                if (margin > 0 && beQty < minBeQty) {
+                    minBeQty = beQty;
+                    bestBe = loc;
+                }
+
+                return `
+                    <tr class="${bestBe && bestBe.name === loc.name ? 'bg-emerald-50/70 font-semibold' : ''}">
+                        <td class="p-2.5 font-medium text-slate-800">${loc.name}</td>
+                        <td class="p-2.5 font-mono text-slate-500">${loc.fc.toLocaleString()} ÷ (${price} - ${loc.vc})</td>
+                        <td class="p-2.5 font-mono font-bold text-sky-700">${beQty > 0 ? beQty.toLocaleString('th-TH', {maximumFractionDigits:1}) : 'ไม่คุ้มทุน'}</td>
+                        <td class="p-2.5 font-mono text-slate-700">${beRev > 0 ? beRev.toLocaleString('th-TH', {maximumFractionDigits:0}) : '-'}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Recommendation text
+            const recBox = document.getElementById('be-recommendation');
+            if (bestBe) {
+                recBox.innerHTML = `
+                    <i class="fa-solid fa-circle-info mr-1 text-sky-600"></i>
+                    <strong>สรุปผล:</strong> ${bestBe.name} ถึงจุดคุ้มทุนเร็วที่สุด ณ ปริมาณผลิตเพียง <strong>${minBeQty.toLocaleString('th-TH', {maximumFractionDigits:1})} หน่วย</strong> 
+                    ดังนั้นหากคาดการณ์ยอดขายเริ่มต้นอยู่ในระดับต่ำ การเลือก ${bestBe.name} จะช่วยลดความเสี่ยงทางธุรกิจมากที่สุด
+                `;
+            }
+
+            updateBreakevenChart();
+        }
+
+        function updateBreakevenChart() {
+            const canvas = document.getElementById('beChart');
+            if (!canvas) return;
+
+            const price = parseFloat(document.getElementById('be-price').value) || 10;
+            const locA = { fc: parseFloat(document.getElementById('be-fc-a').value)||0, vc: parseFloat(document.getElementById('be-vc-a').value)||0 };
+            const locB = { fc: parseFloat(document.getElementById('be-fc-b').value)||0, vc: parseFloat(document.getElementById('be-vc-b').value)||0 };
+            const locC = { fc: parseFloat(document.getElementById('be-fc-c').value)||0, vc: parseFloat(document.getElementById('be-vc-c').value)||0 };
+
+            const quantities = [0, 1000, 2000, 3000, 4000, 5000];
+
+            const dataRevenue = quantities.map(q => q * price);
+            const dataTC_A = quantities.map(q => locA.fc + (locA.vc * q));
+            const dataTC_B = quantities.map(q => locB.fc + (locB.vc * q));
+            const dataTC_C = quantities.map(q => locC.fc + (locC.vc * q));
+
+            if (beChartInstance) beChartInstance.destroy();
+
+            beChartInstance = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels: quantities.map(q => q.toLocaleString() + ' หน่วย'),
+                    datasets: [
+                        { label: 'เส้นรายได้รวม (Revenue)', data: dataRevenue, borderColor: '#10b981', borderDash: [5, 5], borderWidth: 2, fill: false },
+                        { label: 'ต้นทุนรวม A', data: dataTC_A, borderColor: '#0284c7', borderWidth: 2, fill: false },
+                        { label: 'ต้นทุนรวม B', data: dataTC_B, borderColor: '#6366f1', borderWidth: 3, fill: false },
+                        { label: 'ต้นทุนรวม C', data: dataTC_C, borderColor: '#f59e0b', borderWidth: 2, fill: false }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            ticks: { callback: v => v.toLocaleString() + ' ฿' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function loadBreakevenPreset(type) {
+            if (type === 'ex3') {
+                document.getElementById('be-price').value = 10;
+                document.getElementById('be-fc-a').value = 5000;
+                document.getElementById('be-vc-a').value = 8;
+                document.getElementById('be-fc-b').value = 6000;
+                document.getElementById('be-vc-b').value = 4;
+                document.getElementById('be-fc-c').value = 8000;
+                document.getElementById('be-vc-c').value = 5;
+            }
+            calculateBreakEven();
+        }
+
+        // =========================================================================
+        // TAB 4: NPV COST COMPARISON LOGIC
+        // =========================================================================
+
+        function calculateNPV() {
+            const factor = parseFloat(document.getElementById('npv-factor').value) || 1;
+
+            const fcA = parseFloat(document.getElementById('npv-fc-a').value) || 0;
+            const fcB = parseFloat(document.getElementById('npv-fc-b').value) || 0;
+            const fcC = parseFloat(document.getElementById('npv-fc-c').value) || 0;
+
+            const vcA = parseFloat(document.getElementById('npv-vc-a').value) || 0;
+            const vcB = parseFloat(document.getElementById('npv-vc-b').value) || 0;
+            const vcC = parseFloat(document.getElementById('npv-vc-c').value) || 0;
+
+            const pvVcA = vcA * factor;
+            const pvVcB = vcB * factor;
+            const pvVcC = vcC * factor;
+
+            const totA = fcA + pvVcA;
+            const totB = fcB + pvVcB;
+            const totC = fcC + pvVcC;
+
+            document.getElementById('res-npv-vc-a').innerText = vcA.toLocaleString();
+            document.getElementById('res-npv-vc-b').innerText = vcB.toLocaleString();
+            document.getElementById('res-npv-vc-c').innerText = vcC.toLocaleString();
+
+            document.getElementById('res-npv-factor-a').innerText = factor;
+            document.getElementById('res-npv-factor-b').innerText = factor;
+            document.getElementById('res-npv-factor-c').innerText = factor;
+
+            document.getElementById('res-npv-pvvc-a').innerText = pvVcA.toLocaleString('th-TH', {maximumFractionDigits:1});
+            document.getElementById('res-npv-pvvc-b').innerText = pvVcB.toLocaleString('th-TH', {maximumFractionDigits:1});
+            document.getElementById('res-npv-pvvc-c').innerText = pvVcC.toLocaleString('th-TH', {maximumFractionDigits:1});
+
+            document.getElementById('res-npv-fc-a').innerText = fcA.toLocaleString();
+            document.getElementById('res-npv-fc-b').innerText = fcB.toLocaleString();
+            document.getElementById('res-npv-fc-c').innerText = fcC.toLocaleString();
+
+            document.getElementById('res-npv-tot-a').innerText = totA.toLocaleString('th-TH', {maximumFractionDigits:1});
+            document.getElementById('res-npv-tot-b').innerText = totB.toLocaleString('th-TH', {maximumFractionDigits:1});
+            document.getElementById('res-npv-tot-c').innerText = totC.toLocaleString('th-TH', {maximumFractionDigits:1});
+
+            // Find lowest NPV
+            const costs = [
+                { name: 'ทำเลที่ตั้ง A', cost: totA },
+                { name: 'ทำเลที่ตั้ง B', cost: totB },
+                { name: 'ทำเลที่ตั้ง C', cost: totC }
+            ];
+            costs.sort((a, b) => a.cost - b.cost);
+
+            const best = costs[0];
+            document.getElementById('npv-decision-box').innerHTML = `
+                <i class="fa-solid fa-trophy text-emerald-600 text-lg mr-1.5"></i>
+                <strong>สรุปการวิเคราะห์มูลค่าปัจจุบันรวม (NPV):</strong> ควรเลือก <strong>${best.name}</strong> 
+                เนื่องจากเมื่อแปลงมูลค่าเงินตามเวลา (Net Present Value) รวมแล้ว ให้มูลค่าต้นทุนต่ำที่สุดเพียง 
+                <strong>${best.cost.toLocaleString('th-TH', {maximumFractionDigits:1})} พันบาท</strong>
+            `;
+        }
+
+        function loadNpvPreset(type) {
+            if (type === 'ex2') {
+                document.getElementById('npv-years').value = 20;
+                document.getElementById('npv-interest').value = 15;
+                document.getElementById('npv-factor').value = 6.26;
+                document.getElementById('npv-fc-a').value = 8700;
+                document.getElementById('npv-fc-b').value = 6850;
+                document.getElementById('npv-fc-c').value = 8000;
+                document.getElementById('npv-vc-a').value = 2200;
+                document.getElementById('npv-vc-b').value = 2600;
+                document.getElementById('npv-vc-c').value = 1800;
+            }
+            calculateNPV();
+        }
+
+        // Window Load Initializations
+        window.onload = function() {
+            calculateCoordModel();
+            solveVamModel();
+            calculateBreakEven();
+            calculateNPV();
+
+            window.addEventListener('resize', () => {
+                drawAllCandidateCanvases();
+            });
+        };
+    </script>
+</body>
+</html>
